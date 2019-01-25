@@ -48,7 +48,7 @@ withTmpFile f g = bracket acquire
         finalize (path, hd) = hClose hd >> g path >> cleanUp path
 
 renameToFile :: FilePath -> FilePath -> IO ()
-renameToFile = undefined
+renameToFile = undefined -- TODO
 
 type Source = Either FilePath CharBuffer
 newtype State = State { tmpUsed :: Bool }
@@ -58,19 +58,16 @@ collectInput = do buf <- newCharBuffer bufSize WriteBuffer
                   n <- withBuffer buf writeBuf
                   if n < bufSize
                     then return $ Right buf
-                    else undefined
+                    else undefined -- TODO: write to tmp file
                     where writeBuf x = hGetBuf stdin x bufSize
-
-writeOp :: String -> IO ()
-writeOp = putStr
 
 castOutput :: Maybe FilePath -> Source -> IO ()
 
 castOutput = f
   where f (Just x) s = do test <- doesFileExist x
                           if test
-                            then undefined
-                            else withFile x WriteMode (\x -> writeTo x s)
+                            then undefined -- TODO: rename file
+                            else withFile x WriteMode (`writeTo` s)
         f Nothing s = writeTo stdout s
         writeTo h = \case
           Left f  -> readFile f >>= hPutStr h
@@ -81,6 +78,6 @@ sponge :: [String] -> IO ()
 sponge args = do out <- parseArg args
                  input <- collectInput
                  castOutput out input
-
+-- TODO: clean tmp file
 -- >>> hgetbuffering stdout
 
