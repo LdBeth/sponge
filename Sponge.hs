@@ -12,7 +12,7 @@ import           System.Exit              (ExitCode (ExitFailure), exitSuccess,
 
 import           System.Directory         (doesFileExist, removeFile)
 import           System.IO                (Handle, IOMode (WriteMode), hClose,
-                                           hGetBuf, hPutBuf, hPutStr,
+                                           hGetBuf, hPutBuf, hPutStr, withFile,
                                            openTempFile, stdin, stdout)
 
 import           GHC.IO.Buffer            (BufferState (ReadBuffer, WriteBuffer),
@@ -70,12 +70,12 @@ castOutput = f
   where f (Just x) s = do test <- doesFileExist x
                           if test
                             then undefined
-                            else writeTo undefined s
+                            else withFile x WriteMode (\x -> writeTo x s)
         f Nothing s = writeTo stdout s
         writeTo h = \case
           Left f  -> readFile f >>= hPutStr h
           Right b -> withBuffer b
-                     (\x -> hPutBuf stdout x bufSize)
+                     (\x -> hPutBuf h x bufSize)
 
 sponge :: [String] -> IO ()
 sponge args = do out <- parseArg args
