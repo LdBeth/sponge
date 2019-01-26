@@ -10,10 +10,12 @@ import           System.Environment.Blank (getEnv)
 import           System.Exit              (ExitCode (ExitFailure), exitSuccess,
                                            exitWith)
 
-import           System.Directory         (doesFileExist, removeFile, renameFile)
+import           System.Directory         (doesFileExist, removeFile,
+                                           renameFile)
 import           System.IO                (Handle, IOMode (WriteMode), hClose,
-                                           hGetBuf, hPutBuf, hPutStr, withFile,
-                                           openTempFile, stdin, stdout)
+                                           hGetBuf, hPutBuf, hPutStr,
+                                           openTempFile, stdin, stdout,
+                                           withFile)
 
 -- import System.Posix.Files (isRegularFile)
 
@@ -72,7 +74,7 @@ castOutput = f
   where f (Just x) s = do test <- doesFileExist x
                           if test || case s of
                                        Right _ -> True
-                                       otherwise -> False
+                                       _       -> False
                             then withFile x WriteMode (`writeTo` s)
                             else (\(Left p) -> p (`renameFile` x)) s
         f Nothing s = writeTo stdout s
