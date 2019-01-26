@@ -72,6 +72,7 @@ castOutput = f
   where f (Just x) s = do test <- doesFileExist x
                           if test || case s of
                                        Right _ -> True
+                                       otherwise -> False
                             then withFile x WriteMode (`writeTo` s)
                             else (\(Left p) -> p (`renameFile` x)) s
         f Nothing s = writeTo stdout s
