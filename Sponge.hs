@@ -47,7 +47,7 @@ withTmpFile f g = bracket acquire
                   finalize
                   (\(path,hd) -> f hd `finally` hClose hd >> g path)
   where acquire = tmpdir >>= (`openTempFile` "sponge.tmp")
-        finalize (path, hd) =  cleanUp path
+        finalize (path, _) =  cleanUp path
 
 type Source = Either ((FilePath -> IO ()) -> IO ()) CharBuffer
 newtype State = State { tmpUsed :: Bool }
@@ -70,9 +70,10 @@ collectInput = do buf <- newCharBuffer bufSize WriteBuffer
 castOutput :: Maybe FilePath -> Source -> IO ()
 castOutput = f
   where f (Just x) s = do test <- doesFileExist x
-                          if test
-                            then undefined -- TODO: rename file
-                            else withFile x WriteMode (`writeTo` s)
+                          if test || case s of
+                                       Right _ -> True
+                            then withFile x WriteMode (`writeTo` s)
+                            else (\(Left p) -> p (`renameFile` x)) s
         f Nothing s = writeTo stdout s
         writeTo h = \case
           Left f  -> f $ readFile >=> hPutStr h
@@ -82,6 +83,5 @@ sponge :: [String] -> IO ()
 sponge args = do out <- parseArg args
                  input <- collectInput
                  castOutput out input
--- TODO: clean tmp file
 -- >>> hgetbuffering stdout
 
