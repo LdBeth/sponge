@@ -2,18 +2,20 @@
 
 module Sponge where
 
-import           Control.Exception        (bracket)
-import           Control.Monad            (when)
+import           Control.Exception        (bracket, finally)
+import           Control.Monad            (when, (>=>))
 import           Data.Maybe               (fromMaybe)
 
 import           System.Environment.Blank (getEnv)
 import           System.Exit              (ExitCode (ExitFailure), exitSuccess,
                                            exitWith)
 
-import           System.Directory         (doesFileExist, removeFile)
+import           System.Directory         (doesFileExist, removeFile, renameFile)
 import           System.IO                (Handle, IOMode (WriteMode), hClose,
                                            hGetBuf, hPutBuf, hPutStr, withFile,
                                            openTempFile, stdin, stdout)
+
+-- import System.Posix.Files (isRegularFile)
 
 import           GHC.IO.Buffer            (BufferState (ReadBuffer, WriteBuffer),
                                            CharBuffer, newCharBuffer,
@@ -43,26 +45,29 @@ cleanUp f = do exist <- doesFileExist f
 withTmpFile :: (Handle -> IO ()) -> (FilePath -> IO ()) -> IO ()
 withTmpFile f g = bracket acquire
                   finalize
-                  (\(_,hd) -> f hd)
+                  (\(path,hd) -> f hd `finally` hClose hd >> g path)
   where acquire = tmpdir >>= (`openTempFile` "sponge.tmp")
-        finalize (path, hd) = hClose hd >> g path >> cleanUp path
+        finalize (path, hd) =  cleanUp path
 
-renameToFile :: FilePath -> FilePath -> IO ()
-renameToFile = undefined -- TODO
-
-type Source = Either FilePath CharBuffer
+type Source = Either ((FilePath -> IO ()) -> IO ()) CharBuffer
 newtype State = State { tmpUsed :: Bool }
+
+putBuf h b = withBuffer b $ \x -> hPutBuf h x bufSize
 
 collectInput :: IO Source
 collectInput = do buf <- newCharBuffer bufSize WriteBuffer
                   n <- withBuffer buf writeBuf
-                  if n < bufSize
-                    then return $ Right buf
-                    else undefined -- TODO: write to tmp file
+                  return (if n < bufSize
+                           then Right buf
+                           else Left $ tmpFile buf)
                     where writeBuf x = hGetBuf stdin x bufSize
+                          tmpFile buf = withTmpFile
+                                         (\h -> do putBuf h buf
+                                                   str <- getContents
+                                                   hPutStr h str)
+                          -- TODO: test this
 
 castOutput :: Maybe FilePath -> Source -> IO ()
-
 castOutput = f
   where f (Just x) s = do test <- doesFileExist x
                           if test
@@ -70,9 +75,8 @@ castOutput = f
                             else withFile x WriteMode (`writeTo` s)
         f Nothing s = writeTo stdout s
         writeTo h = \case
-          Left f  -> readFile f >>= hPutStr h
-          Right b -> withBuffer b
-                     (\x -> hPutBuf h x bufSize)
+          Left f  -> f $ readFile >=> hPutStr h
+          Right b -> putBuf h b
 
 sponge :: [String] -> IO ()
 sponge args = do out <- parseArg args
