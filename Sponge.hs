@@ -4,6 +4,7 @@ module Sponge where
 
 import           Control.Exception        (bracket, finally)
 import           Control.Monad            (when, (>=>))
+import           Data.Either              (isRight)
 import           Data.Maybe               (fromMaybe)
 
 import           System.Environment.Blank (getEnv)
@@ -51,20 +52,20 @@ withTmpFile f g = bracket acquire
   where acquire = tmpdir >>= (`openTempFile` "sponge.tmp")
         finalize (path, _) =  cleanUp path
 
-type Source = Either ((FilePath -> IO ()) -> IO ()) CharBuffer
+type Source = Either ((FilePath -> IO ()) -> IO ()) (CharBuffer, Int)
 newtype State = State { tmpUsed :: Bool }
 
-putBuf h b = withBuffer b $ \x -> hPutBuf h x bufSize
+putBuf h b n = withBuffer b $ \x -> hPutBuf h x n
 
 collectInput :: IO Source
 collectInput = do buf <- newCharBuffer bufSize WriteBuffer
                   n <- withBuffer buf writeBuf
                   return (if n < bufSize
-                           then Right buf
+                           then Right (buf, n)
                            else Left $ tmpFile buf)
                     where writeBuf x = hGetBuf stdin x bufSize
                           tmpFile buf = withTmpFile
-                                         (\h -> do putBuf h buf
+                                         (\h -> do putBuf h buf bufSize
                                                    str <- getContents
                                                    hPutStr h str)
                           -- TODO: test this
@@ -72,15 +73,13 @@ collectInput = do buf <- newCharBuffer bufSize WriteBuffer
 castOutput :: Maybe FilePath -> Source -> IO ()
 castOutput = f
   where f (Just x) s = do test <- doesFileExist x
-                          if test || case s of
-                                       Right _ -> True
-                                       _       -> False
+                          if test || isRight s
                             then withFile x WriteMode (`writeTo` s)
                             else (\(Left p) -> p (`renameFile` x)) s
         f Nothing s = writeTo stdout s
         writeTo h = \case
           Left f  -> f $ readFile >=> hPutStr h
-          Right b -> putBuf h b
+          Right (b, n) -> putBuf h b n
 
 sponge :: [String] -> IO ()
 sponge args = do out <- parseArg args
